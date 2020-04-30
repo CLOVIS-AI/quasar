@@ -1,0 +1,12 @@
+stages:
+  - deploy
+
+announce on telegram:
+  stage: deploy
+  image: registry.gitlab.com/clovis-ai/dotfiles:latest
+  script:
+    - git changelog --format telegram-html --incoming >>changelog
+    - cat changelog
+    - announce-telegram changelog "$CHAT_IDS"
+  only:
+    - master
