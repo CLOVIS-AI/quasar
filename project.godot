@@ -17,7 +17,7 @@ _global_script_class_icons={
 
 config/name="Quasar"
 run/main_scene="res://scenes/System.tscn"
-config/icon="res://icon.png"
+config/icon="res://quasar.jpg"
 
 [rendering]
 
