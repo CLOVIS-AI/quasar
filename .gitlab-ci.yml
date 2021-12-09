@@ -42,6 +42,15 @@ docker-latest:
   only:
     - master
 
+build:
+  needs: [ docker-build ]
+  image: $BUILD_IMAGE
+  script:
+    - cargo build
+  only:
+    - merge_requests
+    - master
+
 telegram:
   image: registry.gitlab.com/clovis-ai/dotfiles:latest
   needs: [ ]
