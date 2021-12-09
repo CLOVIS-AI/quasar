@@ -1,0 +1,9 @@
+[package]
+name = "quasar"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vulkano = "0.27"
+vulkano-win = "0.27"
+winit = "0.26"
