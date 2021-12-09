@@ -1,9 +1,6 @@
-stages:
-  - deploy
-
-announce on telegram:
-  stage: deploy
+telegram:
   image: registry.gitlab.com/clovis-ai/dotfiles:latest
+  needs: [ ]
   script:
     - git changelog --format telegram-html --incoming >>changelog
     - cat changelog
