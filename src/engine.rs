@@ -32,6 +32,18 @@ impl Engine {
         println!("Selected:");
         println!(" * \t{}", physical_device.properties().device_name);
 
+        println!("\nListing available queue families…");
+        for family in physical_device.queue_families() {
+            println!(" - \tFamily {} ({} queues available)\n\tGraphics: {}\n\tCompute: {}\n\tMinimal image granularity: {:?}\n\tPerformant transfers: {}\n\tSparse bindings: {}",
+                     family.id(),
+                     family.queues_count(),
+                     family.supports_graphics(),
+                     family.supports_compute(),
+                     family.min_image_transfer_granularity(),
+                     family.explicitly_supports_transfers(),
+                     family.supports_sparse_binding());
+        }
+
         Engine {
             instance,
         }
