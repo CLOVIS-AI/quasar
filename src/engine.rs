@@ -44,6 +44,12 @@ impl Engine {
                      family.supports_sparse_binding());
         }
 
+        println!("Selected:");
+        let graphical_family = physical_device.queue_families()
+            .find(|&q| q.supports_graphics())
+            .expect("couldn't find a graphical queue family");
+        println!(" * \tGraphical family: {}", graphical_family.id());
+
         Engine {
             instance,
         }
