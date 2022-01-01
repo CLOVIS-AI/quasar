@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use vulkano::device::{Device, QueuesIter};
+use vulkano::device::{Device, Queue};
 use vulkano::device::DeviceExtensions;
 use vulkano::device::Features;
 use vulkano::device::physical::PhysicalDevice;
@@ -8,9 +8,9 @@ use vulkano::instance::Instance;
 use vulkano::Version;
 
 pub struct Engine {
-    instance: Arc<Instance>,
-    device: Arc<Device>,
-    graphics_queues: QueuesIter,
+    pub instance: Arc<Instance>,
+    pub device: Arc<Device>,
+    pub graphics_queue: Arc<Queue>,
 }
 
 impl Engine {
@@ -56,17 +56,18 @@ impl Engine {
         println!(" * \tGraphical family: {}", graphical_family.id());
 
         println!("\nCreating a device…");
-        let (device, queues) = {
+        let (device, mut queues) = {
             Device::new(physical_device, &Features::none(), &DeviceExtensions::none(),
                         [(graphical_family, 0.5)].iter().cloned())
                 .expect("Couldn't create device.")
         };
+        let queue = queues.next().expect("Could not find a queue.");
 
         println!("Vulkan initialization finished.");
         Engine {
             instance,
             device,
-            graphics_queues: queues,
+            graphics_queue: queue,
         }
     }
 }
