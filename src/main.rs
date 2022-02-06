@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
-use vulkano::descriptor_set::PersistentDescriptorSet;
+use vulkano::format::Format;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
@@ -82,9 +83,10 @@ fn main() {
         .clone();
 
     // Creates a descriptor set that describes how the data is fed to the compute pipeline
-    let mut set_builder = PersistentDescriptorSet::start(layout.clone());
-    set_builder.add_buffer(data_buffer.clone()).expect("Could not add data buffer.");
-    let set = set_builder.build().expect("Could not build the descriptor set");
+    let set = PersistentDescriptorSet::new(
+        layout.clone(),
+        [WriteDescriptorSet::buffer(0, data_buffer.clone())], // 0 is the binding
+    ).expect("Could not create DescriptorSet.");
 
     let mut command_builder = AutoCommandBufferBuilder::primary(
         engine.device.clone(),
