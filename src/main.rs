@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
+use image::{ImageBuffer, Rgba};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
+use vulkano::command_buffer::CommandBufferUsage::OneTimeSubmit;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
-use vulkano::format::Format;
+use vulkano::format::{ClearValue, Format};
+use vulkano::image::{ImageDimensions, StorageImage};
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
@@ -120,6 +123,56 @@ fn main() {
         assert_eq!(*val, n as u32 * 12);
     }
     println!("The product succeeded!");
+
+    // endregion
+
+    // region Fractal
+    println!("\nDemo: Fractal");
+
+    let image = StorageImage::new(
+        engine.device.clone(),
+        ImageDimensions::Dim2d {
+            width: 1024,
+            height: 1024,
+            array_layers: 1,
+        },
+        Format::R8G8B8A8_UNORM,
+        Some(engine.graphics_queue.family()),
+    ).expect("Could not create storage image.");
+
+    // Clear the image
+    let mut clear_image_builder = AutoCommandBufferBuilder::primary(
+        engine.device.clone(),
+        engine.graphics_queue.family(),
+        OneTimeSubmit,
+    ).expect("Could not create image clearing command buffer");
+    clear_image_builder.clear_color_image(image.clone(), ClearValue::Float([0.0, 0.0, 1.0, 1.0])).expect("Could not create a task to color the image.");
+
+    let destination = CpuAccessibleBuffer::from_iter(
+        engine.device.clone(),
+        BufferUsage::all(),
+        false,
+        (0..1024 * 1024 * 4).map(|_| 0u8),
+    ).expect("Couldn't create destination buffer");
+    clear_image_builder.copy_image_to_buffer(image.clone(), destination.clone()).expect("Could not create a task to copy the image");
+
+    let command_buffer = clear_image_builder.build().expect("Could not create the image clearing command buffer.");
+
+    println!("Sending orders to the GPU…");
+    let future = sync::now(engine.device.clone())
+        .then_execute(engine.graphics_queue.clone(), command_buffer)
+        .expect("Could not execute the command buffer")
+        .then_signal_fence_and_flush()
+        .expect("Could not flush the command.");
+
+    println!("Waiting for the GPU to finish working…");
+    future.wait(None).expect("Could not create the image.");
+
+    println!("Saving the results…");
+    let buffer_content = destination.read().expect("Could not read from the destination buffer");
+    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024, 1024, &buffer_content[..]).expect("Could not create raw image");
+    image.save("image.png").expect("Could not save image");
+    println!("Created file 'image.png'.");
 
     // endregion
 }
