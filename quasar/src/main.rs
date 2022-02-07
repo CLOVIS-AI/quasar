@@ -15,6 +15,10 @@ use vulkano::sync::GpuFuture;
 
 use quasar_engine::engine::Engine;
 
+use crate::graphics::demo_graphics;
+
+mod graphics;
+
 fn main() {
     println!("\nStarting…");
 
@@ -208,6 +212,8 @@ fn main() {
     println!("Created file 'image.png'.");
 
     // endregion
+
+    demo_graphics(&engine);
 }
 
 mod times_twelve {
