@@ -13,9 +13,7 @@ use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
-use crate::engine::Engine;
-
-mod engine;
+use quasar_engine::engine::Engine;
 
 fn main() {
     println!("\nStarting…");

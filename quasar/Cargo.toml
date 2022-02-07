@@ -1,0 +1,16 @@
+[package]
+name = "quasar"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quasar-engine = { path = "../engine" }
+image = "0.24"
+
+# Vulkan library
+# Currently, the project is essentially a collection of examples.
+# In the future, the main crate will only depend on the other sub-crates, but will not call any Vulkan API directly.
+vulkano = "0.28.0"
+vulkano-win = "0.28.0"
+vulkano-shaders = "0.28.0"
+winit = "0.26"
