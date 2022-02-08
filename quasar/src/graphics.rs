@@ -1,16 +1,23 @@
-use image::{ImageBuffer, Rgba};
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+use std::sync::Arc;
+
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents};
 use vulkano::format::Format;
-use vulkano::image::{ImageDimensions, StorageImage};
+use vulkano::image::{ImageAccess, ImageDimensions, StorageImage, SwapchainImage};
 use vulkano::image::view::ImageView;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
-use vulkano::render_pass::{Framebuffer, Subpass};
+use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
+use vulkano::swapchain::{AcquireError, SwapchainCreationError};
 use vulkano::sync;
-use vulkano::sync::GpuFuture;
+use vulkano::sync::{FlushError, GpuFuture};
+use winit::event::Event;
+use winit::event::Event::WindowEvent;
+use winit::event::WindowEvent::{CloseRequested, Resized};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::Window;
 
 use quasar_engine::engine::Engine;
 
@@ -20,7 +27,7 @@ struct Vertex {
 }
 vulkano::impl_vertex!(Vertex, position);
 
-pub fn demo_graphics(engine: &Engine) {
+pub fn demo_graphics(engine: Engine, event_loop: EventLoop<()>) {
     println!("\nDemo: Graphics pipeline");
 
     let vertex1 = Vertex { position: [-0.5, -0.5] };
@@ -55,17 +62,11 @@ pub fn demo_graphics(engine: &Engine) {
         }
     ).expect("Could not create render pass");
 
-    let viewport = Viewport {
-        origin: [0.0, 0.0],
-        dimensions: [1024.0, 1024.0],
-        depth_range: 0.0..1.0,
-    };
-
     let pipeline = GraphicsPipeline::start()
         .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
         .vertex_shader(vertex_shader.entry_point("main").expect("Couldn't find the vertex shader's main"), ())
         .input_assembly_state(InputAssemblyState::new())
-        .viewport_state(ViewportState::viewport_fixed_scissor_irrelevant([viewport]))
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .fragment_shader(fragment_shader.entry_point("main").expect("Couldn't find the fragment shader's main"), ())
         .render_pass(Subpass::from(render_pass.clone(), 0).expect("Couldn't create the render sub pass"))
         .build(engine.device.clone())
@@ -92,9 +93,12 @@ pub fn demo_graphics(engine: &Engine) {
 
     let view = ImageView::new(image.clone()).expect("Could not create the image view");
 
-    let framebuffer = Framebuffer::start(render_pass.clone())
-        .add(view).expect("Couldn't add the view to the frame buffer")
-        .build().expect("Couldn't build the frame buffer");
+    let mut viewport = Viewport {
+        origin: [0.0, 0.0],
+        dimensions: [0.0, 0.0],
+        depth_range: 0.0..1.0,
+    };
+    let mut framebuffers = window_size_dependent_setup(&engine.images, render_pass.clone(), &mut viewport);
 
     let mut command_builder = AutoCommandBufferBuilder::primary(
         engine.device.clone(),
@@ -102,43 +106,165 @@ pub fn demo_graphics(engine: &Engine) {
         CommandBufferUsage::OneTimeSubmit,
     ).expect("Could not create command builder");
 
-    command_builder
-        .begin_render_pass(
-            framebuffer.clone(),
-            SubpassContents::Inline,
-            vec![[0.0, 0.0, 1.0, 1.0].into()],
-        ).expect("Could not request to begin the render pass")
+    println!("Handling the window…");
+    let mut recreate_swapchain = false;
+    let mut previous_frame_end = Some(sync::now(engine.device.clone()).boxed());
 
-        .bind_pipeline_graphics(pipeline.clone())
-        .bind_vertex_buffers(0, vertex_buffer.clone())
-        .draw(3, 1, 0, 0)
-        .expect("Couldn't create the draw command")
+    let mut swapchain = engine.swapchain.clone();
 
-        .end_render_pass()
-        .expect("Could not request to end the render pass")
+    event_loop.run(move |event, _, control_flow| {
+        match event {
+            WindowEvent { event, .. } => {
+                match event {
+                    CloseRequested {} => {
+                        println!("Received a request to close the window…");
+                        *control_flow = ControlFlow::Exit;
+                    }
+                    Resized(_) => {
+                        recreate_swapchain = true;
+                    }
+                    _ => ()
+                }
+            },
+            Event::RedrawEventsCleared => {
+                // It is important to call this function from time to time, otherwise resources will keep
+                // accumulating and you will eventually reach an out of memory error.
+                // Calling this function polls various fences in order to determine what the GPU has
+                // already processed, and frees the resources that are no longer needed.
+                previous_frame_end.as_mut().unwrap().cleanup_finished();
 
-        .copy_image_to_buffer(image, destination.clone())
-        .expect("Couldn't request the copy to the destination buffer");
+                // Whenever the window resizes we need to recreate everything dependent on the window size.
+                // In this example that includes the swapchain, the framebuffers and the dynamic state viewport.
+                if recreate_swapchain {
+                    // Get the new dimensions of the window.
+                    let dimensions: [u32; 2] = engine.surface.window().inner_size().into();
+                    let (new_swapchain, new_images) =
+                        match swapchain.recreate().dimensions(dimensions).build() {
+                            Ok(r) => r,
+                            // This error tends to happen when the user is manually resizing the window.
+                            // Simply restarting the loop is the easiest way to fix this issue.
+                            Err(SwapchainCreationError::UnsupportedDimensions) => return,
+                            Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
+                        };
 
-    let command_buffer = command_builder
-        .build().expect("Could not build the command buffer");
+                    swapchain = new_swapchain;
+                    // Because framebuffers contains an Arc on the old swapchain, we need to
+                    // recreate framebuffers as well.
+                    framebuffers = window_size_dependent_setup(
+                        &new_images,
+                        render_pass.clone(),
+                        &mut viewport,
+                    );
+                    recreate_swapchain = false;
+                }
 
-    println!("Sending orders to the GPU…");
-    let future = sync::now(engine.device.clone())
-        .then_execute(engine.graphics_queue.clone(), command_buffer)
-        .expect("Couldn't request the execution of the command buffer")
+                // Before we can draw on the output, we have to *acquire* an image from the swapchain. If
+                // no image is available (which happens if you submit draw commands too quickly), then the
+                // function will block.
+                // This operation returns the index of the image that we are allowed to draw upon.
+                //
+                // This function can block if no image is available. The parameter is an optional timeout
+                // after which the function call will return an error.
+                let (image_num, suboptimal, acquire_future) =
+                    match vulkano::swapchain::acquire_next_image(swapchain.clone(), None) {
+                        Ok(r) => r,
+                        Err(AcquireError::OutOfDate) => {
+                            recreate_swapchain = true;
+                            return;
+                        }
+                        Err(e) => panic!("Failed to acquire next image: {:?}", e),
+                    };
 
-        .then_signal_fence_and_flush()
-        .expect("Couldn't request the fence and flush");
+                // acquire_next_image can be successful, but suboptimal. This means that the swapchain image
+                // will still work, but it may not display correctly. With some drivers this can be when
+                // the window resizes, but it may not cause the swapchain to become out of date.
+                if suboptimal {
+                    recreate_swapchain = true;
+                }
 
-    println!("Waiting for the GPU to finish working…");
-    future.wait(None).expect("The command buffer failed");
+                // Specify the color to clear the framebuffer with i.e. blue
+                let clear_values = vec![[0.0, 0.0, 1.0, 1.0].into()];
 
-    println!("Saving the results…");
-    let buffer_content = destination.read().expect("Could not read from the destination buffer");
-    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024, 1024, &buffer_content[..]).expect("Could not create raw image");
-    image.save("triangle.png").expect("Could not save image");
-    println!("Created file 'triangle.png'.");
+                // In order to draw, we have to build a *command buffer*. The command buffer object holds
+                // the list of commands that are going to be executed.
+                //
+                // Building a command buffer is an expensive operation (usually a few hundred
+                // microseconds), but it is known to be a hot path in the driver and is expected to be
+                // optimized.
+                //
+                // Note that we have to pass a queue family when we create the command buffer. The command
+                // buffer will only be executable on that given queue family.
+                let mut builder = AutoCommandBufferBuilder::primary(
+                    engine.device.clone(),
+                    engine.graphics_queue.family(),
+                    CommandBufferUsage::OneTimeSubmit,
+                )
+                    .unwrap();
+
+                builder
+                    // Before we can draw, we have to *enter a render pass*. There are two methods to do
+                    // this: `draw_inline` and `draw_secondary`. The latter is a bit more advanced and is
+                    // not covered here.
+                    //
+                    // The third parameter builds the list of values to clear the attachments with. The API
+                    // is similar to the list of attachments when building the framebuffers, except that
+                    // only the attachments that use `load: Clear` appear in the list.
+                    .begin_render_pass(
+                        framebuffers[image_num].clone(),
+                        SubpassContents::Inline,
+                        clear_values,
+                    )
+                    .unwrap()
+                    // We are now inside the first subpass of the render pass. We add a draw command.
+                    //
+                    // The last two parameters contain the list of resources to pass to the shaders.
+                    // Since we used an `EmptyPipeline` object, the objects have to be `()`.
+                    .set_viewport(0, [viewport.clone()])
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .bind_vertex_buffers(0, vertex_buffer.clone())
+                    .draw(vertex_buffer.len() as u32, 1, 0, 0)
+                    .unwrap()
+                    // We leave the render pass by calling `draw_end`. Note that if we had multiple
+                    // subpasses we could have called `next_inline` (or `next_secondary`) to jump to the
+                    // next subpass.
+                    .end_render_pass()
+                    .unwrap();
+
+                // Finish building the command buffer by calling `build`.
+                let command_buffer = builder.build().unwrap();
+
+                let future = previous_frame_end
+                    .take()
+                    .unwrap()
+                    .join(acquire_future)
+                    .then_execute(engine.graphics_queue.clone(), command_buffer)
+                    .unwrap()
+                    // The color output is now expected to contain our triangle. But in order to show it on
+                    // the screen, we have to *present* the image by calling `present`.
+                    //
+                    // This function does not actually present the image immediately. Instead it submits a
+                    // present command at the end of the queue. This means that it will only be presented once
+                    // the GPU has finished executing the command buffer that draws the triangle.
+                    .then_swapchain_present(engine.graphics_queue.clone(), swapchain.clone(), image_num)
+                    .then_signal_fence_and_flush();
+
+                match future {
+                    Ok(future) => {
+                        previous_frame_end = Some(future.boxed());
+                    }
+                    Err(FlushError::OutOfDate) => {
+                        recreate_swapchain = true;
+                        previous_frame_end = Some(sync::now(engine.device.clone()).boxed());
+                    }
+                    Err(e) => {
+                        println!("Failed to flush future: {:?}", e);
+                        previous_frame_end = Some(sync::now(engine.device.clone()).boxed());
+                    }
+                }
+            },
+            _ => ()
+        }
+    });
 }
 
 mod vertex_shader {
@@ -169,4 +295,26 @@ mod fragment_shader {
             }
         "
     }
+}
+
+/// This method is called once during initialization, then again whenever the window is resized
+fn window_size_dependent_setup(
+    images: &[Arc<SwapchainImage<Window>>],
+    render_pass: Arc<RenderPass>,
+    viewport: &mut Viewport,
+) -> Vec<Arc<Framebuffer>> {
+    let dimensions = images[0].dimensions().width_height();
+    viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
+
+    images
+        .iter()
+        .map(|image| {
+            let view = ImageView::new(image.clone()).unwrap();
+            Framebuffer::start(render_pass.clone())
+                .add(view)
+                .unwrap()
+                .build()
+                .unwrap()
+        })
+        .collect::<Vec<_>>()
 }
