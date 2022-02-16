@@ -12,15 +12,19 @@ use vulkano::image::view::ImageView;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
+use winit::event_loop::EventLoop;
 
-use crate::engine::Engine;
+use quasar_engine::engine::Engine;
 
-mod engine;
+use crate::graphics::demo_graphics;
+
+mod graphics;
 
 fn main() {
     println!("\nStarting…");
 
-    let engine = Engine::new();
+    let event_loop = EventLoop::new();
+    let engine = Engine::new(&event_loop);
 
     // region Copy data from one buffer to another
     println!("\nDemo: Copy data from one buffer to another.");
@@ -210,6 +214,8 @@ fn main() {
     println!("Created file 'image.png'.");
 
     // endregion
+
+    demo_graphics(engine.clone(), event_loop);
 }
 
 mod times_twelve {

@@ -1,11 +1,2 @@
-[package]
-name = "quasar"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-vulkano = "0.28.0"
-vulkano-win = "0.28.0"
-vulkano-shaders = "0.28.0"
-winit = "0.26"
-image = "0.24"
+[workspace]
+members = ["engine", "quasar"]
