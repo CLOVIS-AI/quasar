@@ -1,3 +1,2 @@
-pub mod engine;
-pub mod renderer;
-pub mod painter;
+pub mod drawing;
+pub mod world;

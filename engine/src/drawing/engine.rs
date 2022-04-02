@@ -1,14 +1,13 @@
-use std::rc::Rc;
 use std::sync::Arc;
 
 use winit::event_loop::EventLoop;
 
-use crate::painter::Painter;
-use crate::renderer::Renderer;
+use crate::drawing::painter::Painter;
+use crate::drawing::renderer::Renderer;
 
 #[derive(Clone)]
 pub struct Engine {
-    event_loop: Rc<EventLoop<()>>,
+    event_loop: Arc<EventLoop<()>>,
     pub renderer: Arc<Renderer>,
     pub screen: Arc<Painter>,
 }
@@ -22,9 +21,15 @@ impl Engine {
 
         println!("Vulkan initialization finished.");
         Engine {
-            event_loop: Rc::new(event_loop),
+            event_loop: Arc::new(event_loop),
             renderer,
             screen,
         }
+    }
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
     }
 }

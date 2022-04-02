@@ -1,7 +1,6 @@
-use quasar_engine::engine::Engine;
+use quasar_engine::drawing::engine::Engine;
 
 fn main() {
     println!("\nStarting…");
-
     Engine::new();
 }
