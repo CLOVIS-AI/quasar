@@ -51,6 +51,15 @@ build:
     - merge_requests
     - master
 
+test:
+  needs: [ docker-build ]
+  image: $BUILD_IMAGE
+  script:
+    - cargo test --workspace
+  only:
+    - merge_requests
+    - master
+
 telegram:
   image: registry.gitlab.com/clovis-ai/dotfiles:latest
   needs: [ ]
