@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 quasar-engine = { path = "../engine" }
 image = "0.24"
+log = "0.4.17"
+simple_logger = "2.1.0"
 
 # Vulkan library
 # Currently, the project is essentially a collection of examples.

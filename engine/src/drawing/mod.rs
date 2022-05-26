@@ -1,3 +1,3 @@
 pub mod engine;
-pub mod painter;
-pub mod renderer;
+mod screen;
+mod hardware;
