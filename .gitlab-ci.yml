@@ -69,3 +69,27 @@ telegram:
     - announce-telegram changelog "$CHAT_IDS"
   only:
     - master
+
+documentation:
+  needs: [ docker-build ]
+  image: $BUILD_IMAGE
+  script:
+    - cargo doc
+  artifacts:
+    paths:
+      - target/doc
+  only:
+    - merge_requests
+    - master
+
+pages:
+  needs: [ documentation ]
+  image: alpine
+  script:
+    - mkdir -p public
+    - cp -r target/doc public/documentation
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
