@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::debug;
 use winit::event_loop::EventLoop;
 
 use crate::drawing::painter::Painter;
@@ -19,7 +20,7 @@ impl Engine {
         let renderer = Renderer::new();
         let screen = Painter::new(renderer.clone(), &event_loop);
 
-        println!("Vulkan initialization finished.");
+        debug!("Vulkan initialization finished.");
         Engine {
             event_loop: Arc::new(event_loop),
             renderer,

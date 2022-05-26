@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::trace;
 use vulkano::image::{ImageUsage, SwapchainImage};
 use vulkano::swapchain::{Surface, Swapchain};
 use vulkano::swapchain::ColorSpace::SrgbNonLinear;
@@ -21,14 +22,14 @@ pub struct Painter {
 
 impl Painter {
     pub fn new(renderer: Arc<Renderer>, event_loop: &EventLoop<()>) -> Arc<Self> {
-        println!("\nCreating the surface…");
+        trace!("Creating the surface…");
         let window = WindowBuilder::new()
             .build(event_loop)
             .expect("Couldn't create the window");
         let surface = create_vk_surface_from_handle(window, renderer.instance.clone())
             .expect("Couldn't create the Vulkan surface");
 
-        println!("\nCreating the swap-chain…");
+        trace!("Creating the swap-chain…");
         let capabilities = surface
             .capabilities(renderer.device.physical_device())
             .expect("Couldn't instantiate the capabilities for the swap-chain");
