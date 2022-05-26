@@ -6,18 +6,20 @@ use vulkano::device::DeviceExtensions;
 use vulkano::device::Features;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::instance::Instance;
+use vulkano::swapchain::Surface;
 use vulkano::Version;
 use vulkano_win::VkSurfaceBuild;
 use winit::event_loop::EventLoop;
-use winit::window::WindowBuilder;
+use winit::window::{Window, WindowBuilder};
 
 /// Relay between the [`Engine`] and Vulkan.
-pub struct Renderer {
+pub struct Hardware {
+    surface: Arc<Surface<Window>>,
     graphics_queue: Arc<Queue>,
     compute_queue: Arc<Queue>,
 }
 
-impl Renderer {
+impl Hardware {
     pub fn new(event_loop: &EventLoop<()>) -> Self {
         debug!("Vulkan and window initialization…");
         trace!("Connecting to Vulkan…");
@@ -142,9 +144,34 @@ impl Renderer {
 
         trace!("Done creating the devices.");
 
-        Renderer {
+        Hardware {
+            surface,
             graphics_queue,
             compute_queue,
         }
+    }
+
+    pub fn surface(&self) -> &Arc<Surface<Window>> {
+        &self.surface
+    }
+
+    pub fn window(&self) -> &Window {
+        self.surface.window()
+    }
+
+    pub fn graphics_queue(&self) -> &Arc<Queue> {
+        &self.graphics_queue
+    }
+
+    pub fn graphics_device(&self) -> &Arc<Device> {
+        self.graphics_queue.device()
+    }
+
+    pub fn compute_queue(&self) -> &Arc<Queue> {
+        &self.compute_queue
+    }
+
+    pub fn compute_device(&self) -> &Arc<Device> {
+        self.compute_queue.device()
     }
 }
