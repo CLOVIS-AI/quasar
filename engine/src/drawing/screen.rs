@@ -2,14 +2,9 @@ use std::sync::Arc;
 
 use log::{debug, trace};
 use vulkano::image::{ImageUsage, SwapchainImage};
-use vulkano::swapchain::{Surface, Swapchain};
-use vulkano::swapchain::ColorSpace::SrgbNonLinear;
-use vulkano::swapchain::FullscreenExclusive::Default;
-use vulkano::swapchain::PresentMode::Fifo;
-use vulkano::swapchain::SurfaceTransform::Identity;
-use vulkano_win::create_vk_surface_from_handle;
+use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
 use winit::event_loop::EventLoop;
-use winit::window::{Window, WindowBuilder};
+use winit::window::Window;
 
 use crate::drawing::hardware::Hardware;
 
@@ -25,25 +20,31 @@ impl Screen {
 
         trace!("Creating the swap-chain…");
         let (mut swapchain, images) = {
-            let capabilities = hardware.surface()
-                .capabilities(hardware.graphics_device().physical_device())
+            let capabilities = hardware.graphics_device().physical_device()
+                .surface_capabilities(hardware.surface(), Default::default())
                 .expect("Could not query the surface capabilities");
 
-            let composite_alpha = capabilities.supported_composite_alpha.iter().next().expect("Could not select any alpha capabilities");
+            let format = hardware.graphics_device().physical_device()
+                .surface_formats(hardware.surface(), Default::default())
+                .expect("Could not select any format capabilities")
+                [0].0;
 
-            let format = capabilities.supported_formats.iter().next().expect("Could not select any format capabilities").0;
-
-            let dimensions: [u32; 2] = hardware.window().inner_size().into();
-
-            Swapchain::start(Arc::clone(hardware.graphics_device()), Arc::clone(hardware.surface()))
-                .num_images(capabilities.min_image_count)
-                .format(format)
-                .dimensions(dimensions)
-                .usage(ImageUsage::color_attachment())
-                .sharing_mode(hardware.graphics_queue())
-                .composite_alpha(composite_alpha)
-                .build()
-                .expect("Couldn't create the swapchain")
+            Swapchain::new(
+                Arc::clone(hardware.graphics_device()),
+                Arc::clone(hardware.surface()),
+                SwapchainCreateInfo {
+                    min_image_count: capabilities.min_image_count,
+                    image_format: Some(format),
+                    image_extent: hardware.window().inner_size().into(),
+                    image_usage: ImageUsage::color_attachment(),
+                    composite_alpha: capabilities
+                        .supported_composite_alpha
+                        .iter()
+                        .next()
+                        .expect("Could not select an alpha capability"),
+                    ..Default::default()
+                },
+            ).expect("Could not create the swapchain")
         };
 
         Screen {
