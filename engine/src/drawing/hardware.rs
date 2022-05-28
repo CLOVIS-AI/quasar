@@ -25,7 +25,8 @@ impl Hardware {
         let instance = Instance::new(InstanceCreateInfo {
             enabled_extensions: required_extensions,
             ..Default::default()
-        }).expect("Couldn't instantiate the Vulkan instance");
+        })
+            .expect("Couldn't instantiate the Vulkan instance");
 
         trace!("Creating the surface…");
         let surface = WindowBuilder::new()
@@ -42,12 +43,19 @@ impl Hardware {
         let physical_candidates: Vec<(i32, PhysicalDevice)> = PhysicalDevice::enumerate(&instance)
             .map(|physical| {
                 let properties = physical.properties();
-                info!(" - {} ({:?})", properties.device_name, properties.device_type);
+                info!(
+                    " - {} ({:?})",
+                    properties.device_name, properties.device_type
+                );
                 trace!("   API: {}", physical.api_version());
                 trace!("   Driver: {}", properties.driver_version);
                 physical
             })
-            .filter(|physical| physical.supported_extensions().is_superset_of(&device_extensions))
+            .filter(|physical| {
+                physical
+                    .supported_extensions()
+                    .is_superset_of(&device_extensions)
+            })
             .map(|physical| {
                 // Assign a score to each type of device
                 // Lower means better
@@ -66,37 +74,69 @@ impl Hardware {
         // Debug the different queues
         trace!("Available family queues:");
         for (score, physical_candidate) in &physical_candidates {
-            trace!(" - {} with score {}", physical_candidate.properties().device_name, score);
+            trace!(
+                " - {} with score {}",
+                physical_candidate.properties().device_name,
+                score
+            );
             for family in physical_candidate.queue_families() {
-                trace!("    - Family {} ({} queues)", family.id(), family.queues_count());
+                trace!(
+                    "    - Family {} ({} queues)",
+                    family.id(),
+                    family.queues_count()
+                );
                 trace!("      Graphics: {}", family.supports_graphics());
                 trace!("      Compute: {}", family.supports_compute());
-                trace!("      Minimal image granularity: {:?}", family.min_image_transfer_granularity());
-                trace!("      Performant transfers: {}", family.explicitly_supports_transfers());
-                trace!("      Sparse bindings: {}", family.supports_sparse_binding());
+                trace!(
+                    "      Minimal image granularity: {:?}",
+                    family.min_image_transfer_granularity()
+                );
+                trace!(
+                    "      Performant transfers: {}",
+                    family.explicitly_supports_transfers()
+                );
+                trace!(
+                    "      Sparse bindings: {}",
+                    family.supports_sparse_binding()
+                );
             }
         }
 
         // Find a graphics queue and a compute queue
-        let (_, graphics_physical, graphics_family) = physical_candidates.iter()
+        let (_, graphics_physical, graphics_family) = physical_candidates
+            .iter()
             .filter_map(|(score, physical)| {
-                physical.queue_families()
-                    .find(|family| family.supports_graphics() && family.supports_surface(&surface).unwrap_or(false))
+                physical
+                    .queue_families()
+                    .find(|family| {
+                        family.supports_graphics()
+                            && family.supports_surface(&surface).unwrap_or(false)
+                    })
                     .map(|family| (score, physical, family))
             })
             .min_by_key(|(score, _, _)| *score)
             .expect("Could not find a suitable graphics queue family");
-        info!("Selected for graphics: {} / family {}", graphics_physical.properties().device_name, graphics_family.id());
+        info!(
+            "Selected for graphics: {} / family {}",
+            graphics_physical.properties().device_name,
+            graphics_family.id()
+        );
 
-        let (_, compute_physical, compute_family) = physical_candidates.iter()
+        let (_, compute_physical, compute_family) = physical_candidates
+            .iter()
             .filter_map(|(score, physical)| {
-                physical.queue_families()
+                physical
+                    .queue_families()
                     .find(|family| family.supports_compute())
                     .map(|family| (score, physical, family))
             })
             .min_by_key(|(score, _, _)| *score)
             .expect("Could not find a suitable compute queue family");
-        info!("Selected for compute: {} / family {}", compute_physical.properties().device_name, compute_family.id());
+        info!(
+            "Selected for compute: {} / family {}",
+            compute_physical.properties().device_name,
+            compute_family.id()
+        );
 
         debug!("Creating the device(s)…");
         // Case 1: different GPUs
@@ -114,7 +154,10 @@ impl Hardware {
                     _ne: Default::default(),
                 }]
             } else {
-                vec![QueueCreateInfo::family(graphics_family), QueueCreateInfo::family(compute_family)]
+                vec![
+                    QueueCreateInfo::family(graphics_family),
+                    QueueCreateInfo::family(compute_family),
+                ]
             };
 
             let (device, mut queues) = Device::new(
@@ -126,12 +169,17 @@ impl Hardware {
                     queue_create_infos,
                     ..Default::default()
                 },
-            ).expect("Couldn't instantiate the device");
+            )
+                .expect("Couldn't instantiate the device");
 
             graphics_device = Arc::clone(&device);
             compute_device = Arc::clone(&device);
-            graphics_queue = queues.next().expect("Couldn't instantiate the graphics queue");
-            compute_queue = queues.next().expect("Couldn't instantiate the compute queue");
+            graphics_queue = queues
+                .next()
+                .expect("Couldn't instantiate the graphics queue");
+            compute_queue = queues
+                .next()
+                .expect("Couldn't instantiate the compute queue");
         } else {
             let (graphics_device_, mut graphics_queues) = Device::new(
                 *graphics_physical,
@@ -142,7 +190,8 @@ impl Hardware {
                     queue_create_infos: vec![QueueCreateInfo::family(graphics_family)],
                     ..Default::default()
                 },
-            ).expect("Couldn't instantiate the graphics device");
+            )
+                .expect("Couldn't instantiate the graphics device");
 
             let (compute_device_, mut compute_queues) = Device::new(
                 *compute_physical,
@@ -153,12 +202,17 @@ impl Hardware {
                     queue_create_infos: vec![QueueCreateInfo::family(compute_family)],
                     ..Default::default()
                 },
-            ).expect("Couldn't instantiate the compute device");
+            )
+                .expect("Couldn't instantiate the compute device");
 
             graphics_device = graphics_device_;
-            graphics_queue = graphics_queues.next().expect("Couldn't instantiate the graphics queue");
+            graphics_queue = graphics_queues
+                .next()
+                .expect("Couldn't instantiate the graphics queue");
             compute_device = compute_device_;
-            compute_queue = compute_queues.next().expect("Couldn't instantiate the compute queue");
+            compute_queue = compute_queues
+                .next()
+                .expect("Couldn't instantiate the compute queue");
         }
 
         trace!("Done creating the devices.");

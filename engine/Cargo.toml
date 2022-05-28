@@ -9,3 +9,7 @@ vulkano-win = "0.29.0"
 vulkano-shaders = "0.29.0"
 winit = "0.26"
 log = "0.4.17"
+
+[dev-dependencies]
+simple_logger = "2.1.0"
+bytemuck = { version = "1.7", features = ["derive", "extern_crate_std", "min_const_generics"] }
