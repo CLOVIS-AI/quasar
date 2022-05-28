@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use log::{debug, trace};
 use vulkano::image::{ImageUsage, SwapchainImage};
-use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
+use vulkano::swapchain::{Swapchain, SwapchainCreateInfo, SwapchainCreationError};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
@@ -20,14 +20,18 @@ impl Screen {
 
         trace!("Creating the swap-chain…");
         let (mut swapchain, images) = {
-            let capabilities = hardware.graphics_device().physical_device()
+            let capabilities = hardware
+                .graphics_device()
+                .physical_device()
                 .surface_capabilities(hardware.surface(), Default::default())
                 .expect("Could not query the surface capabilities");
 
-            let format = hardware.graphics_device().physical_device()
+            let format = hardware
+                .graphics_device()
+                .physical_device()
                 .surface_formats(hardware.surface(), Default::default())
-                .expect("Could not select any format capabilities")
-                [0].0;
+                .expect("Could not select any format capabilities")[0]
+                .0;
 
             Swapchain::new(
                 Arc::clone(hardware.graphics_device()),
@@ -44,7 +48,8 @@ impl Screen {
                         .expect("Could not select an alpha capability"),
                     ..Default::default()
                 },
-            ).expect("Could not create the swapchain")
+            )
+                .expect("Could not create the swapchain")
         };
 
         Screen {
@@ -52,5 +57,26 @@ impl Screen {
             swapchain,
             images,
         }
+    }
+
+    pub fn swapchain(&self) -> &Arc<Swapchain<Window>> {
+        &self.swapchain
+    }
+
+    pub fn images(&self) -> &Vec<Arc<SwapchainImage<Window>>> {
+        &self.images
+    }
+
+    pub fn recreate(&self) -> Result<Screen, SwapchainCreationError> {
+        let (new_swapchain, new_images) = self.swapchain.recreate(SwapchainCreateInfo {
+            image_extent: self.hardware.surface().window().inner_size().into(),
+            ..self.swapchain.create_info()
+        })?;
+
+        Ok(Screen {
+            hardware: Arc::clone(&self.hardware),
+            swapchain: new_swapchain,
+            images: new_images,
+        })
     }
 }
